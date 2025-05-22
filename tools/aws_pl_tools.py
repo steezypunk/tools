@@ -1,7 +1,36 @@
 import sys
-import boto3
-import argparse
 import requests
+
+def handle(args, client):
+    if validate_tool(args.tool):
+        ip = args.ip
+        if not ip:
+            print(f"{ip} does not exist in {args.prefix_list_id}. Checking your current outgoing IP...")
+            ip = get_my_public_ip()
+
+        ip = normalize_ip_to_cidr(ip)
+        print(f"Your current outgoing IP is: {ip}")
+            
+        entries = fetch_prefix_list_entries(client, args.prefix_list_id)
+        if args.action == "add":
+            if not prefix_list_contains_ip(entries, ip):
+                add_ip(client, args.prefix_list_id, ip)
+            else:
+                print(f"Won't add ip, exist")
+        elif args.action == "remove":
+            if prefix_list_contains_ip(entries, ip):
+                remove_ip(client, args.prefix_list_id, ip)
+            else:
+                print(f"Won't del ip, not exist")
+        elif args.action == "list":
+            entries = fetch_prefix_list_entries(client, args.prefix_list_id)
+            if not entries:
+                print("Prefix list is empty.")
+            else:
+                for entry in entries:
+                    print(entry)
+        else:
+            print(f"Unknown action: {args.action}")
 
 def validate_tool(tool):
     return tool == "aws-pl"
@@ -33,6 +62,13 @@ def get_my_public_ip():
     except Exception as e:
         print(f"Error fetching public IP: {e}")
         sys.exit(1)
+
+def normalize_ip_to_cidr(ip):
+    # Check if the input is already in CIDR format
+    if '/' in ip:
+        return ip
+    # Otherwise, append /32 to denote a single IP address in CIDR
+    return f"{ip}/32"
 
 def add_ip(client, prefix_list_id, ip):
     entries = fetch_prefix_list_entries(client, prefix_list_id)
@@ -67,34 +103,3 @@ def remove_ip(client, prefix_list_id, ip):
         print(f"Removed {ip} from {prefix_list_id}.")
     except Exception as e:
         print(f"Error removing IP: {e}")
-
-def main():
-    parser = argparse.ArgumentParser(description="AWS Prefix List Tools")
-    parser.add_argument("--tool", required=True, help="Tool name, must be 'aws-pl'")
-    parser.add_argument("--action", required=True, choices=["add", "remove"], help="Action to perform")
-    parser.add_argument("--prefix-list-id", required=True, help="Prefix List ID")
-    parser.add_argument("--ip", required=True, help="IP/CIDR to add or remove")
-    args = parser.parse_args()
-
-    if not validate_tool(args.tool):
-        print("Invalid tool. Only 'aws-pl' is supported.")
-        sys.exit(1)
-
-    client = boto3.client('ec2')
-
-    ip = args.ip
-    entries = fetch_prefix_list_entries(client, args.prefix_list_id)
-    if args.action == "add":
-        if not prefix_list_contains_ip(entries, ip):
-            print(f"{ip} does not exist in {args.prefix_list_id}. Checking your current outgoing IP...")
-            my_ip = get_my_public_ip()
-            print(f"Your current outgoing IP is: {my_ip}")
-        add_ip(client, args.prefix_list_id, ip)
-    elif args.action == "remove":
-        remove_ip(client, args.prefix_list_id, ip)
-    else:
-        print("Invalid action.")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()

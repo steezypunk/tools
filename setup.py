@@ -9,7 +9,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         "boto3",
-        "argparse"
+        "argparse",
+        "requests"
         # Add your dependencies here, e.g. 'requests>=2.0.0'
     ],
     python_requires=">=3.7",
